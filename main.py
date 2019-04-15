@@ -1,10 +1,11 @@
 import cv2
 
 import numpy as np
+from skimage.measure import compare_ssim as ssim
 
-# Global Variables
 from functions import transform_image
 
+# Global Variables
 roi_h = 250
 roi_w = 200
 pts_src = np.array([[629, 361], [1066, 411], [396, 486], [946, 571]])
@@ -16,11 +17,13 @@ input_video = cv2.VideoCapture('input.mp4')
 
 # Calculating homography
 hom, status = cv2.findHomography(pts_dst, pts_src)
-# print(hom)
 
 ret, road_empty = input_video.read()
-roi_empty = transform_image(road_empty, roi, hom)
+
+roi_empty = np.zeros_like(roi)
+transform_image(road_empty, roi_empty, hom)
 roi_empty_gray = cv2.cvtColor(roi_empty, cv2.COLOR_BGR2GRAY)
+roi_empty_gray = cv2.medianBlur(roi_empty_gray, 11)
 
 # Working with each video frame
 while input_video.isOpened():
@@ -29,10 +32,28 @@ while input_video.isOpened():
     if not ret:
         break
 
-    roi = transform_image(frame, roi, hom)
-    cv2.imshow('Input Video', frame)
-    cv2.imshow('ROI Empty Road', roi_empty)
-    cv2.imshow('ROI', roi)
+    transform_image(frame, roi, hom)
+    roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    roi_gray = cv2.medianBlur(roi_gray, 11)
+
+    # Calculating the difference between images
+    score, diff = ssim(roi_empty_gray, roi_gray, full=True)
+    roi_diff = diff * 255
+    np.clip(roi_diff, 0, 255, out=roi_diff)
+    roi_diff = roi_diff.astype('uint8')
+
+    # Threshold an image
+    roi_thresh = cv2.threshold(roi_diff, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
+    # Getting the contours of an image
+    cnts = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Displaying the playback
+    # cv2.imshow('Input Video', frame)
+    cv2.imshow('ROI Empty Road', roi_empty_gray)
+    cv2.imshow('ROI', roi_gray)
+    cv2.imshow('ROI Difference', roi_diff)
+    cv2.imshow('ROI Threshold', roi_thresh)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break

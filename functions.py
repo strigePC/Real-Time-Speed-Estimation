@@ -32,9 +32,9 @@ def transform_image(input_image, output_image, hom):
 
     for y in range(out_height):
         for x in range(out_width):
-            transformed_pixel = transform_pixel([x, y], hom)
-            x_in = transformed_pixel[0]
-            y_in = transformed_pixel[1]
+            denominator = hom[2, 0] * x + hom[2, 1] * y + hom[2, 2]  # Optimizing the calculation
+            x_in = (hom[0, 0] * x + hom[0, 1] * y + hom[0, 2]) / denominator
+            y_in = (hom[1, 0] * x + hom[1, 1] * y + hom[1, 2]) / denominator
 
             if x_in < 0 or x_in >= in_width or y_in < 0 or y >= in_height:
                 continue
@@ -43,18 +43,3 @@ def transform_image(input_image, output_image, hom):
             output_image[int(round(y)), int(round(x))] = input_image[int(round(y_in)), int(round(x_in))]
 
     return output_image
-
-
-@jit
-def transform_pixel(input_pixels, hom):
-    x = input_pixels[0]
-    y = input_pixels[1]
-
-    output_pixels = np.zeros_like(input_pixels)
-
-    # Calculating the transformed coordinates
-    denominator = hom[2, 0] * x + hom[2, 1] * y + hom[2, 2]  # Optimizing the calculation
-    output_pixels[0] = (hom[0, 0] * x + hom[0, 1] * y + hom[0, 2]) / denominator
-    output_pixels[1] = (hom[1, 0] * x + hom[1, 1] * y + hom[1, 2]) / denominator
-
-    return output_pixels
