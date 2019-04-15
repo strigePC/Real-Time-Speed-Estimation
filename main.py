@@ -11,6 +11,8 @@ roi_w = 200
 pts_src = np.array([[629, 361], [1066, 411], [396, 486], [946, 571]])
 pts_dst = np.array([[0, 0], [roi_w - 1, 0], [0, roi_h - 1], [roi_w - 1, roi_h - 1]])
 roi = np.zeros((roi_h, roi_w, 3), np.uint8)
+cars = []
+next_id = 0
 
 # Reading a video
 input_video = cv2.VideoCapture('input.mp4')
@@ -27,6 +29,8 @@ roi_empty_gray = cv2.medianBlur(roi_empty_gray, 11)
 
 # Working with each video frame
 while input_video.isOpened():
+    next_cars = []
+
     # Reading a frame from video
     ret, frame = input_video.read()
     if not ret:
@@ -44,14 +48,62 @@ while input_video.isOpened():
 
     # Threshold an image
     roi_thresh = cv2.threshold(roi_diff, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    roi_thresh = cv2.morphologyEx(roi_thresh, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
 
     # Getting the contours of an image
-    cnts = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts, hier = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Drawing a bounding rectangle around cars
+    for contour in cnts:
+        (x, y, w, h) = cv2.boundingRect(contour)
+        if w * h > 2500:
+            M = cv2.moments(contour)
+            cx = M['m10'] / M['m00']
+            cy = M['m01'] / M['m00']
+
+            print(cx, cy)
+            new_car = {
+                'id': next_id,
+                'cx': cx,
+                'cy': cy,
+                'topLeft': (x, y),
+                'bottomRight': (x + w, y + h),
+                'speed': 0
+            }
+
+            for car in cars:
+                if abs(car['cx'] - cx) <= 10 and abs(car['cy'] - cy) <= 30:
+                    new_car['id'] = car['id']
+                    speed = abs(car['cy'] - cy) * 9
+
+                    if speed > 0:
+                        new_car['speed'] = speed
+
+            # Append a car for the next iteration
+            next_cars.append(new_car)
+
+            print(new_car['id'])
+
+            # Increment Next Car ID if new car was added
+            if new_car['id'] == next_id:
+                next_id += 1
+
+    cars = next_cars
+    for car in cars:
+        cv2.rectangle(roi, car['topLeft'], car['bottomRight'], (0, 255, 0), 1)
+
+        if car['speed'] is not None:
+            cv2.putText(roi, 'id: {}'.format(car['id']), (car['topLeft'][0], car['topLeft'][1] + 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+
+            cv2.putText(roi, '{0:.0f} km/h'.format(car['speed']), (car['topLeft'][0], car['bottomRight'][1] + 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
     # Displaying the playback
     # cv2.imshow('Input Video', frame)
+    cv2.imshow('ROI', roi)
     cv2.imshow('ROI Empty Road', roi_empty_gray)
-    cv2.imshow('ROI', roi_gray)
+    cv2.imshow('ROI Gray', roi_gray)
     cv2.imshow('ROI Difference', roi_diff)
     cv2.imshow('ROI Threshold', roi_thresh)
 
