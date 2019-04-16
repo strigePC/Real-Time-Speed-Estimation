@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from skimage.measure import compare_ssim as ssim
 
-from functions import transform_image, calculate_homography
+from functions import transform_image, calculate_homography, convert_mask, opening, erosion, dilation, closing
 
 # Global Variables
 roi_h = 250
@@ -20,6 +20,7 @@ input_video = cv2.VideoCapture('input.mp4')
 # Calculating homography
 hom = calculate_homography(pts_dst, pts_src)
 
+# Reading the empty road frame
 ret, road_empty = input_video.read()
 
 roi_empty = np.zeros_like(roi)
@@ -41,39 +42,51 @@ while input_video.isOpened():
     roi_gray = cv2.medianBlur(roi_gray, 11)
 
     # Calculating the difference between images
+    # TODO: Rewrite Structural Similarity function
     score, diff = ssim(roi_empty_gray, roi_gray, full=True)
     roi_diff = diff * 255
     np.clip(roi_diff, 0, 255, out=roi_diff)
     roi_diff = roi_diff.astype('uint8')
 
     # Threshold an image
+    # TODO: Rewrite threshold function
     roi_thresh = cv2.threshold(roi_diff, 164, 255, cv2.THRESH_BINARY_INV)[1]
-    roi_thresh = cv2.morphologyEx(roi_thresh, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8), iterations=2)
+
+    # Applying morphological operations
+    roi_thresh = opening(roi_thresh, convert_mask(np.ones((9, 9), np.uint8)))
+    roi_thresh = opening(roi_thresh, convert_mask(np.ones((9, 9), np.uint8)))
 
     # Getting the contours of an image
+    # TODO: Rewrite contours function
     cnts, hier = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Drawing a bounding rectangle around cars
+    # Detecting cars
     for contour in cnts:
         (x, y, w, h) = cv2.boundingRect(contour)
+        # Check if the size of contour is big enough
         if w * h > 1200:
+            # Calculating centroids
+            # TODO: Rewrite Centroids function
             M = cv2.moments(contour)
             cx = M['m10'] / M['m00']
             cy = M['m01'] / M['m00']
 
-            print(cx, cy)
+            # Defining a car
             new_car = {
                 'id': next_id,
                 'cx': cx,
                 'cy': cy,
                 'topLeft': (x, y),
                 'bottomRight': (x + w, y + h),
-                'speed': 0
+                'speed': -1
             }
 
+            # Check if car was already defined
             for car in cars:
                 if abs(car['cx'] - cx) <= 10 and abs(car['cy'] - cy) <= 30:
                     new_car['id'] = car['id']
+
+                    # Calculating the speed of a car (1 px/frame = 9 km/h)
                     speed = abs(car['cy'] - cy) * 9
 
                     if speed > 0:
@@ -82,13 +95,13 @@ while input_video.isOpened():
             # Append a car for the next iteration
             next_cars.append(new_car)
 
-            print(new_car['id'])
-
-            # Increment Next Car ID if new car was added
+            # Increment Next Car ID if this car is new
             if new_car['id'] == next_id:
                 next_id += 1
 
     cars = next_cars
+
+    # Drawing a rectangle around a car and displaying info (id, speed)
     for car in cars:
         cv2.rectangle(roi, car['topLeft'], car['bottomRight'], (0, 255, 0), 1)
 
