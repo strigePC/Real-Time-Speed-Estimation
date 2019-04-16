@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from skimage.measure import compare_ssim as ssim
 
-from functions import transform_image
+from functions import transform_image, calculate_homography
 
 # Global Variables
 roi_h = 250
@@ -18,7 +18,7 @@ next_id = 0
 input_video = cv2.VideoCapture('input.mp4')
 
 # Calculating homography
-hom, status = cv2.findHomography(pts_dst, pts_src)
+hom = calculate_homography(pts_dst, pts_src)
 
 ret, road_empty = input_video.read()
 
@@ -47,8 +47,8 @@ while input_video.isOpened():
     roi_diff = roi_diff.astype('uint8')
 
     # Threshold an image
-    roi_thresh = cv2.threshold(roi_diff, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
-    roi_thresh = cv2.morphologyEx(roi_thresh, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
+    roi_thresh = cv2.threshold(roi_diff, 164, 255, cv2.THRESH_BINARY_INV)[1]
+    roi_thresh = cv2.morphologyEx(roi_thresh, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8), iterations=2)
 
     # Getting the contours of an image
     cnts, hier = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -56,7 +56,7 @@ while input_video.isOpened():
     # Drawing a bounding rectangle around cars
     for contour in cnts:
         (x, y, w, h) = cv2.boundingRect(contour)
-        if w * h > 2500:
+        if w * h > 1200:
             M = cv2.moments(contour)
             cx = M['m10'] / M['m00']
             cy = M['m01'] / M['m00']

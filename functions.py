@@ -43,3 +43,27 @@ def transform_image(input_image, output_image, hom):
             output_image[int(round(y)), int(round(x))] = input_image[int(round(y_in)), int(round(x_in))]
 
     return output_image
+
+
+def calculate_homography(src, dst):
+    x = src[:, 0]
+    y = src[:, 1]
+    x_bar = dst[:, 0]
+    y_bar = dst[:, 1]
+    a = np.zeros((8, 8))
+    b = np.zeros((8, 1))
+
+    for i in range(4):
+        a[2 * i] = [x[i], y[i], 1, 0, 0, 0, -x[i] * x_bar[i], -y[i] * x_bar[i]]
+        a[2 * i + 1] = [0, 0, 0, x[i], y[i], 1, -x[i] * y_bar[i], -y[i] * y_bar[i]]
+        b[2 * i] = x_bar[i]
+        b[2 * i + 1] = y_bar[i]
+
+    h_vect = np.linalg.solve(a.T.dot(a), a.T.dot(b))
+
+    h = np.zeros((3, 3))
+    h[0] = [h_vect[0], h_vect[1], h_vect[2]]
+    h[1] = [h_vect[3], h_vect[4], h_vect[5]]
+    h[2] = [h_vect[6], h_vect[7], 1]
+
+    return h
