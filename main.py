@@ -1,9 +1,12 @@
 import cv2
 
 import numpy as np
-from skimage.measure import compare_ssim as ssim
 
-from functions import transform_image, calculate_homography, convert_mask, opening, erosion, dilation, closing
+from centroid import find_centroid
+from structural_similarity import compare_ssim as ssim
+from functions import inverse_threshold
+from homography import transform_image, calculate_homography
+from morphological_operations import opening, convert_mask
 
 # Global Variables
 roi_h = 250
@@ -42,22 +45,19 @@ while input_video.isOpened():
     roi_gray = cv2.medianBlur(roi_gray, 11)
 
     # Calculating the difference between images
-    # TODO: Rewrite Structural Similarity function
-    score, diff = ssim(roi_empty_gray, roi_gray, full=True)
+    score, diff = ssim(roi_empty_gray, roi_gray)
     roi_diff = diff * 255
     np.clip(roi_diff, 0, 255, out=roi_diff)
     roi_diff = roi_diff.astype('uint8')
 
     # Threshold an image
-    # TODO: Rewrite threshold function
-    roi_thresh = cv2.threshold(roi_diff, 164, 255, cv2.THRESH_BINARY_INV)[1]
+    roi_thresh = inverse_threshold(roi_diff, 164)
 
     # Applying morphological operations
-    roi_thresh = opening(roi_thresh, convert_mask(np.ones((9, 9), np.uint8)))
-    roi_thresh = opening(roi_thresh, convert_mask(np.ones((9, 9), np.uint8)))
+    # roi_thresh = cv2.morphologyEx(roi_thresh, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8), iterations=3)
+    roi_thresh = opening(roi_thresh, convert_mask(np.ones((7, 7), np.uint8)), iterations=3)
 
     # Getting the contours of an image
-    # TODO: Rewrite contours function
     cnts, hier = cv2.findContours(roi_thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Detecting cars
@@ -66,10 +66,7 @@ while input_video.isOpened():
         # Check if the size of contour is big enough
         if w * h > 1200:
             # Calculating centroids
-            # TODO: Rewrite Centroids function
-            M = cv2.moments(contour)
-            cx = M['m10'] / M['m00']
-            cy = M['m01'] / M['m00']
+            cx, cy = find_centroid(contour)
 
             # Defining a car
             new_car = {
@@ -89,8 +86,10 @@ while input_video.isOpened():
                     # Calculating the speed of a car (1 px/frame = 9 km/h)
                     speed = abs(car['cy'] - cy) * 9
 
-                    if speed > 0:
+                    if speed > 0 > car['speed']:
                         new_car['speed'] = speed
+                    elif car['speed'] >= 0:
+                        new_car['speed'] = (speed + car['speed']) / 2
 
             # Append a car for the next iteration
             next_cars.append(new_car)
@@ -113,7 +112,7 @@ while input_video.isOpened():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
     # Displaying the playback
-    # cv2.imshow('Input Video', frame)
+    cv2.imshow('Input Video', frame)
     cv2.imshow('ROI', roi)
     cv2.imshow('ROI Empty Road', roi_empty_gray)
     cv2.imshow('ROI Gray', roi_gray)
