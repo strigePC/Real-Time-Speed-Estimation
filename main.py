@@ -29,7 +29,11 @@ ret, road_empty = input_video.read()
 roi_empty = np.zeros_like(roi)
 transform_image(road_empty, roi_empty, hom)
 roi_empty_gray = cv2.cvtColor(roi_empty, cv2.COLOR_BGR2GRAY)
+roi_prev_gray = roi_empty_gray.copy()
 roi_empty_gray = cv2.medianBlur(roi_empty_gray, 11)
+
+hsv_mask = np.zeros_like(roi)
+hsv_mask[:, :, 1] = 255
 
 # Working with each video frame
 while input_video.isOpened():
@@ -43,6 +47,14 @@ while input_video.isOpened():
     transform_image(frame, roi, hom)
     roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     roi_gray = cv2.medianBlur(roi_gray, 11)
+
+    flow = cv2.calcOpticalFlowFarneback(roi_prev_gray, roi_gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    mag, ang = cv2.cartToPolar(flow[:, :, 0], flow[:, :, 1], angleInDegrees=True)
+    hsv_mask[:, :, 0] = ang / 2
+    hsv_mask[:, :, 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+
+    bgr = cv2.cvtColor(hsv_mask, cv2.COLOR_HSV2BGR)
+    cv2.imshow('HSV', bgr)
 
     # Calculating the difference between images
     score, diff = ssim(roi_empty_gray, roi_gray)
@@ -111,6 +123,12 @@ while input_video.isOpened():
             cv2.putText(roi, '{0:.0f} km/h'.format(car['speed']), (car['topLeft'][0], car['bottomRight'][1] + 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
+    # pts_src = np.array([[629, 361], [1066, 411], [396, 486], [946, 571]])
+    cv2.line(frame, tuple(pts_src[0]), tuple(pts_src[1]), (0, 255, 0), 3)
+    cv2.line(frame, tuple(pts_src[0]), tuple(pts_src[2]), (0, 255, 0), 3)
+    cv2.line(frame, tuple(pts_src[3]), tuple(pts_src[1]), (0, 255, 0), 3)
+    cv2.line(frame, tuple(pts_src[2]), tuple(pts_src[3]), (0, 255, 0), 3)
+
     # Displaying the playback
     cv2.imshow('Input Video', frame)
     cv2.imshow('ROI', roi)
@@ -121,6 +139,8 @@ while input_video.isOpened():
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
+
+    roi_prev_gray = roi_gray
 
 # Releasing and closing resources
 input_video.release()
